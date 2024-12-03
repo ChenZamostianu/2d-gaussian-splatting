@@ -22,6 +22,14 @@ from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
 class GaussianModel:
+    def process_pointcloud(self, pts3d, upper_quantile=.75, lower_quantile=.15):
+        print(f"Total points before filtering: {pts3d.shape[0]}")
+        max_dist = torch.quantile(distCUDA2(pts3d).float(), q=upper_quantile).item()
+        min_dist = torch.quantile(distCUDA2(pts3d).float(), q=lower_quantile).item()
+        mask = (distCUDA2(pts3d).float() >= min_dist) & (distCUDA2(pts3d).float() <= max_dist)
+        print(f"Total points after filtering: {mask.sum()}")
+        return mask.cuda()
+
 
     def setup_functions(self):
         def build_covariance_from_scaling_rotation(center, scaling, scaling_modifier, rotation):
@@ -123,15 +131,25 @@ class GaussianModel:
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
-        fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
-        fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+        #fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
+        #fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+        #features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
+        #features[:, :3, 0 ] = fused_color
+        #features[:, 3:, 1:] = 0.0
+
+        #print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+
+        #dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        mask = self.process_pointcloud(torch.from_numpy(pcd.points).float().cuda(),upper_quantile=.8, lower_quantile=.1)
+        fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()[mask]
+        fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())[mask] 
         features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
         features[:, :3, 0 ] = fused_color
         features[:, 3:, 1:] = 0.0
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
-        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()[mask]), 0.0000001)
         scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 2)
         rots = torch.rand((fused_point_cloud.shape[0], 4), device="cuda")
 

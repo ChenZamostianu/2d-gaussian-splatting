@@ -1,4 +1,3 @@
-#
 # Copyright (C) 2023, Inria
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
@@ -8,8 +7,9 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
+import wandb
 import os
+import numpy as np
 import torch
 from random import randint
 from utils.loss_utils import l1_loss, ssim
@@ -29,6 +29,8 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
+    wandb.login()
+    wandb.init(project="Medida-dev", entity='cryptoguys')
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -67,8 +69,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-        
+        #image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        image, viewspace_point_tensor, visibility_filter, radii, depthmap = render_pkg["render"], render_pkg["viewspace_points"], \
+render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"] 
+
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
@@ -92,6 +96,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         iter_end.record()
 
         with torch.no_grad():
+            if viewpoint_cam.uid == 1 or viewpoint_cam.uid == 10:
+                psnr_val = psnr(image, gt_image).mean().double()
+                ssim_val = ssim(image, gt_image).mean().double()
+                wandb_logger(gt_image, image,
+                     rend_normal, depthmap, iteration,
+                     gaussians.get_xyz.shape[0], loss.item(), psnr_val.item(), ssim_val.item(), viewpoint_cam.uid)
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             ema_dist_for_log = 0.4 * dist_loss.item() + 0.6 * ema_dist_for_log
@@ -166,6 +176,65 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 except Exception as e:
                     # raise e
                     network_gui.conn = None
+
+def wandb_logger(gt_image, predicted_image, normal_map, depth_map, iteration, num_patches, loss, psnr_score, ssim_score,
+                 uid):
+    """
+    Log images and metrics to Weights & Biases with side-by-side comparisons and video support.
+    """
+    # Ensure proper normalization for images
+    def normalize_image(img, n=255):
+        if img.dtype != np.uint8:
+            img = np.clip(img * n, 0, n).astype(np.uint8)
+        return img
+
+    def normalize_depth(depth):
+        depth = depth.squeeze()
+        depth_min = np.min(depth)
+        depth_max = np.max(depth)
+        normalized_depth = (depth - depth_min) / (depth_max - depth_min)
+        return (normalized_depth * 255).astype(np.uint8)
+
+    def normalize_normals(normals):
+        return ((normals + 1) * 127.5).astype(np.uint8)
+    depth_viz = depth_map.detach().cpu().permute(1, 2, 0).numpy()
+    gt_image = gt_image.detach().cpu().permute(1, 2, 0).numpy()
+    # Process images
+    pred_img = normalize_image(predicted_image.detach().cpu().permute(1, 2, 0).numpy())
+    normal_viz = normalize_normals(normal_map.detach().cpu().permute(1, 2, 0).numpy())
+
+    log_dict = {
+    #     Images panel 1: Reconstructed vs Ground Truth
+        f"View_{uid}/Reconstructed": wandb.Image(
+            pred_img,
+            caption=f"Reconstructed (PSNR: {psnr_score:.2f}, SSIM: {ssim_score:.2f})"
+        ),
+        f"View_{uid}/Ground_Truth": wandb.Image(
+            gt_image,
+            caption="Ground Truth"
+        ),
+    
+        # Images panel 2: Depth vs Normal maps
+        f"View_{uid}/Depth_Map": wandb.Image(
+            depth_viz,
+            caption="Depth Map",
+            mode="L"
+        ),
+        f"View_{uid}/Normal_Map": wandb.Image(
+            normal_viz,
+            caption="Normal Map"
+        ),
+
+        # Metrics
+        "num_patches": num_patches,
+        "Loss": loss,
+        "PSNR": psnr_score,
+        "SSIM": ssim_score,
+        "iteration": iteration,
+    }
+
+    wandb.log(log_dict, step=iteration)
+
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
@@ -258,8 +327,10 @@ if __name__ == "__main__":
     parser.add_argument('--ip', type=str, default="127.0.0.1")
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    #parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    #parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1000*(i+1) for i in range(12)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1000*(i+1) for i in range(12)])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
