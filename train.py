@@ -179,7 +179,27 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
                     network_gui.conn = None
 
 def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
+    import torchvision.transforms as F
+
+    def normalize_depth(depth_map):
+        min_depth = depth_map.min()
+        max_depth = depth_map.max()
+        range_depth = max_depth - min_depth
+        if range_depth == 0:
+            return torch.zeros_like(depth_map)
+        normalized_depth = (depth_map - min_depth) / range_depth
+        return normalized_depth
+
+    def resize_rgb_image(image, desired_size):
+        # ... (same preprocessing as before)
+        resized_image = F.resize(image, desired_size)
+        return resized_image
+
+
+
     vp = scene.getTrainCameras().copy()
+
+
     base_mvs = os.path.join(dataset.model_path, f"mvs_{iteration}")
     if not os.path.exists(base_mvs):
         os.makedirs(base_mvs)
@@ -189,7 +209,13 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
         dmap_path = os.path.join(base_mvs, f"depth_{cam.uid:04d}.dmap")
 
         rend_pkg = render(cam, gaussians, pipe, background)
+
         depth_map = rend_pkg['surf_depth']
+        depth_map = normalize_depth(depth_map)
+        if dataset._resolution > 1:
+            true_size = (depth_map.shape[0] * dataset._resolution, depth_map.shape[1] * dataset._resolution)
+            depth_map = resize_rgb_image(depth_map, desired_size=true_size)
+
         valid_mask = ~((depth_map.isinf()) | (depth_map.isnan()))
         depth_map_min = depth_map[valid_mask].min().item()
         depth_map_max = depth_map[valid_mask].max().item()
