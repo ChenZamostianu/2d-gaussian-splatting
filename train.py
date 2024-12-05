@@ -128,6 +128,7 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
 
             training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
+                extract_dmaps(background, dataset, gaussians, pipe, scene, iteration)
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
@@ -177,6 +178,44 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
                     # raise e
                     network_gui.conn = None
 
+def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
+    vp = scene.getTrainCameras().copy()
+    base_mvs = os.path.join(dataset.model_path, f"mvs_{iteration}")
+    if not os.path.exists(base_mvs):
+        os.makedirs(base_mvs)
+
+    for cam in vp:
+
+        dmap_path = os.path.join(base_mvs, f"depth_{cam.uid:04d}.dmap")
+
+        rend_pkg = render(cam, gaussians, pipe, background)
+        depth_map = rend_pkg['surf_depth']
+        valid_mask = ~((depth_map.isinf()) | (depth_map.isnan()))
+        depth_map_min = depth_map[valid_mask].min().item()
+        depth_map_max = depth_map[valid_mask].max().item()
+        depth_map = depth_map.detach().cpu().permute(1, 2, 0).numpy()
+        normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
+        confidence_map = np.ones((depth_map.shape[0], depth_map.shape[1]), dtype=np.float32) * 10
+        data = {
+            "depth_map": depth_map,  ##
+            "image_width": cam.image_width,
+            "image_height": cam.image_height,
+            "depth_width": cam.image_width,
+            "depth_height": cam.image_height,
+            "depth_min": depth_map_min,
+            "depth_max": depth_map_max,
+            "file_name": f"{cam.uid}_depth",
+            "reference_view_id": cam.uid,
+            "neighbor_view_ids": list(range(len(vp))),
+            "K": create_intrinsic_matrix(cam),
+            "R": cam.R,
+            "C": cam.T,
+            # Optional fields (include if available)
+            "normal_map": normal_map,
+            "confidence_map": confidence_map,  ##
+        }
+
+        saveDMAP(data, dmap_path=dmap_path)
 def wandb_logger(gt_image, predicted_image, normal_map, depth_map, iteration, num_patches, loss, psnr_score, ssim_score,
                  uid):
     """
