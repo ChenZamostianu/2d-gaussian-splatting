@@ -212,8 +212,8 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
 
         depth_map = rend_pkg['surf_depth']
         depth_map = normalize_depth(depth_map)
-        true_size = (depth_map.shape[0] * dataset._resolution, depth_map.shape[1] * dataset._resolution)
-        depth_map = resize_rgb_image(depth_map, desired_size=true_size)
+        #true_size = (depth_map.shape[0] * dataset._resolution, depth_map.shape[1] * dataset._resolution)
+        #depth_map = resize_rgb_image(depth_map, desired_size=true_size)
 
         valid_mask = ~((depth_map.isinf()) | (depth_map.isnan()))
         depth_map_min = depth_map[valid_mask].min().item()
