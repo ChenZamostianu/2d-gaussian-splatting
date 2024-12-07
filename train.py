@@ -11,6 +11,7 @@ import wandb
 import os
 import numpy as np
 import torch
+import math
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
@@ -178,6 +179,40 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
                     # raise e
                     network_gui.conn = None
 
+def create_intrinsic_matrix(camera):
+    """
+    Creates an intrinsic matrix (K) from the Camera() object.
+
+    Args:
+        camera: The Camera() object containing FoVx, image_width, and image_height.
+
+    Returns:
+        torch.Tensor: The intrinsic matrix K of shape (3, 3).
+    """
+    if not hasattr(camera, 'FoVx') or not hasattr(camera, 'image_width') or not hasattr(camera, 'image_height'):
+        raise ValueError("Camera object must have 'FoVx', 'image_width', and 'image_height' attributes.")
+
+    # Extract necessary attributes
+    FoVx = camera.FoVx  # Field of view in the x direction
+    image_width = camera.image_width
+    image_height = camera.image_height
+
+    # Compute the focal length in pixels (f_x and f_y)
+    f_x = (image_width / 2) / math.tan(FoVx / 2)
+    f_y = f_x * (image_height / image_width)  # Assuming square pixels
+
+    # Principal point (cx, cy)
+    c_x = image_width / 2
+    c_y = image_height / 2
+
+    # Construct the intrinsic matrix
+    K = torch.tensor([
+        [f_x, 0,   c_x],
+        [0,   f_y, c_y],
+        [0,   0,   1]
+    ], dtype=torch.float32)
+
+    return K.detach().cpu().numpy()
 def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
     import torchvision.transforms as F
 
