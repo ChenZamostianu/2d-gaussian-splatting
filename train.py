@@ -337,8 +337,7 @@ def saveDMAP(data: dict, dmap_path: str):
             views_map = data["views_map"]
             dmap.write(views_map.tobytes())
             print(f"the views_map: {views_map.shape}")
-        
-    loadDMAP(dmap_path)
+
 
 def create_intrinsic_matrix(camera):
     """
