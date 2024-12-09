@@ -421,7 +421,7 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
             "depth_height": depth_map.shape[0],
             "depth_min": depth_map_min,
             "depth_max": depth_map_max,
-            "file_name": f"{cam.image_name}",
+            "file_name": f"{cam.image_full_name}",
             "reference_view_id": cam.uid,
             "neighbor_view_ids": list(range(len(vp))),
             "K": create_intrinsic_matrix(cam),
