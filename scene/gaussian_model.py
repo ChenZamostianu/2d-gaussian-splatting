@@ -20,6 +20,7 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
+from utils.pose_utils import get_tensor_from_camera
 
 class GaussianModel:
     def process_pointcloud(self, pts3d, upper_quantile=.75, lower_quantile=.15):
@@ -176,6 +177,10 @@ class GaussianModel:
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
         ]
+        l_cam = [{'params': [self.P],'lr': training_args.rotation_lr*0.1, "name": "pose"},]
+
+        l += l_cam
+
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
@@ -423,3 +428,39 @@ class GaussianModel:
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
+
+
+    def compute_relative_world_to_camera(self, R1, t1, R2, t2):
+        # Create a row of zeros with a one at the end, for homogeneous coordinates
+        zero_row = np.array([[0, 0, 0, 1]], dtype=np.float32)
+
+        # Compute the inverse of the first extrinsic matrix
+        E1_inv = np.hstack([R1.T, -R1.T @ t1.reshape(-1, 1)])  # Transpose and reshape for correct dimensions
+        E1_inv = np.vstack([E1_inv, zero_row])  # Append the zero_row to make it a 4x4 matrix
+
+        # Compute the second extrinsic matrix
+        E2 = np.hstack([R2, -R2 @ t2.reshape(-1, 1)])  # No need to transpose R2
+        E2 = np.vstack([E2, zero_row])  # Append the zero_row to make it a 4x4 matrix
+
+        # Compute the relative transformation
+        E_rel = E2 @ E1_inv
+
+        return E_rel
+
+    def init_RT_seq(self, cam_list):
+        poses =[]
+        for cam in cam_list[1.0]:
+            p = get_tensor_from_camera(cam.world_view_transform.transpose(0, 1)) # R T -> quat t
+            poses.append(p)
+        poses = torch.stack(poses)
+        self.P = torch.nn.Parameter(poses.cuda().requires_grad_(True))
+
+
+    def get_RT(self, idx):
+        pose = self.P[idx]
+        return pose
+
+    def get_RT_test(self, idx):
+        pose = self.test_P[idx]
+        return pose
+

@@ -70,7 +70,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        #image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         image, viewspace_point_tensor, visibility_filter, radii, depthmap = render_pkg["render"], render_pkg["viewspace_points"], \
 render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"] 
 
@@ -100,7 +99,7 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
             if viewpoint_cam.uid == 1 or viewpoint_cam.uid == 10:
                 psnr_val = psnr(image, gt_image).mean().double()
                 ssim_val = ssim(image, gt_image).mean().double()
-                wandb_logger(gt_image, image,
+                wandb_logger(image,
                      rend_normal, depthmap, iteration,
                      gaussians.get_xyz.shape[0], loss.item(), psnr_val.item(), ssim_val.item(), viewpoint_cam.uid)
             # Progress bar
@@ -322,21 +321,17 @@ def saveDMAP(data: dict, dmap_path: str):
         dmap.write(C.tobytes())
 
         depth_map = data["depth_map"]
-        print(depth_map.shape)
         dmap.write(depth_map.tobytes())
 
         if "normal_map" in data:
             normal_map = data["normal_map"]
             dmap.write(normal_map.tobytes())
-            print(f"the normal_map:{normal_map.shape}")
         if "confidence_map" in data:
             confidence_map = data["confidence_map"]
             dmap.write(confidence_map.tobytes())
-            print(f"the confidence_map: {confidence_map.shape}")
         if "views_map" in data:
             views_map = data["views_map"]
             dmap.write(views_map.tobytes())
-            print(f"the views_map: {views_map.shape}")
 
 
 def create_intrinsic_matrix(camera):
@@ -437,8 +432,8 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
         }
 
         saveDMAP(data, dmap_path=dmap_path)
-def wandb_logger(gt_image, predicted_image, normal_map, depth_map, iteration, num_patches, loss, psnr_score, ssim_score,
-                 uid):
+def wandb_logger(predicted_image, normal_map, depth_map, iteration, num_patches, loss, psnr_score, ssim_score, uid):
+
     """
     Log images and metrics to Weights & Biases with side-by-side comparisons and video support.
     """
@@ -457,29 +452,26 @@ def wandb_logger(gt_image, predicted_image, normal_map, depth_map, iteration, nu
 
     def normalize_normals(normals):
         return ((normals + 1) * 127.5).astype(np.uint8)
-    depth_viz = depth_map.detach().cpu().permute(1, 2, 0).numpy()
-    gt_image = gt_image.detach().cpu().permute(1, 2, 0).numpy()
+
     # Process images
+    depth_viz = depth_map.detach().cpu().permute(1, 2, 0).numpy()
     pred_img = normalize_image(predicted_image.detach().cpu().permute(1, 2, 0).numpy())
     normal_viz = normalize_normals(normal_map.detach().cpu().permute(1, 2, 0).numpy())
 
     log_dict = {
-    #     Images panel 1: Reconstructed vs Ground Truth
+    #     Images panel 1: Reconstructed Image
         f"View_{uid}/Reconstructed": wandb.Image(
             pred_img,
             caption=f"Reconstructed (PSNR: {psnr_score:.2f}, SSIM: {ssim_score:.2f})"
         ),
-        f"View_{uid}/Ground_Truth": wandb.Image(
-            gt_image,
-            caption="Ground Truth"
-        ),
-    
+
         # Images panel 2: Depth vs Normal maps
         f"View_{uid}/Depth_Map": wandb.Image(
             depth_viz,
             caption="Depth Map",
-            mode="L"
+            mode="magma"
         ),
+
         f"View_{uid}/Normal_Map": wandb.Image(
             normal_viz,
             caption="Normal Map"
