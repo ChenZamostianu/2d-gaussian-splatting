@@ -178,7 +178,8 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
                 except Exception as e:
                     # raise e
                     network_gui.conn = None
-ef loadDMAP(dmap_path):
+
+def loadDMAP(dmap_path):
     with open(dmap_path, "rb") as dmap:
         file_type = dmap.read(2).decode()
         content_type = np.frombuffer(dmap.read(1), dtype=np.dtype("B"))
