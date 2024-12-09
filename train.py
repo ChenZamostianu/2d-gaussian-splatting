@@ -391,10 +391,10 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
     vp = scene.getTrainCameras().copy()
 
 
-    base_mvs = os.path.join(dataset.model_path, f"mvs_{iteration}")
-    if not os.path.exists(base_mvs):
-        os.makedirs(base_mvs)
-
+    # base_mvs = os.path.join(dataset.model_path, f"mvs_{iteration}")
+    # if not os.path.exists(base_mvs):
+    #     os.makedirs(base_mvs)
+    base_mvs = dataset.model_path
     for cam in vp:
 
         dmap_path = os.path.join(base_mvs, f"depth_{cam.uid:04d}.dmap")

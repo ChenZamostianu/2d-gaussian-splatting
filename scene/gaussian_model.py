@@ -23,12 +23,10 @@ from utils.general_utils import strip_symmetric, build_scaling_rotation
 from utils.pose_utils import get_tensor_from_camera
 
 class GaussianModel:
-    def process_pointcloud(self, pts3d, upper_quantile=.75, lower_quantile=.15):
-        print(f"Total points before filtering: {pts3d.shape[0]}")
+    def process_pointcloud(self, pts3d, upper_quantile=.7, lower_quantile=0.):
         max_dist = torch.quantile(distCUDA2(pts3d).float(), q=upper_quantile).item()
         min_dist = torch.quantile(distCUDA2(pts3d).float(), q=lower_quantile).item()
         mask = (distCUDA2(pts3d).float() >= min_dist) & (distCUDA2(pts3d).float() <= max_dist)
-        print(f"Total points after filtering: {mask.sum()}")
         return mask.cuda()
 
 
@@ -453,7 +451,7 @@ class GaussianModel:
             p = get_tensor_from_camera(cam.world_view_transform.transpose(0, 1)) # R T -> quat t
             poses.append(p)
         poses = torch.stack(poses)
-        self.P = torch.nn.Parameter(poses.cuda().requires_grad_(True))
+        self.P = torch.nn.Parameter(poses.cuda().requires_grad_(False))
 
 
     def get_RT(self, idx):

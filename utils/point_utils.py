@@ -6,6 +6,10 @@ import os, cv2
 import matplotlib.pyplot as plt
 import math
 
+from utils.graphics_utils import BasicPointCloud
+from scipy.spatial import Delaunay
+
+
 def depths_to_points(view, depthmap):
     c2w = (view.world_view_transform.T).inverse()
     W, H = view.image_width, view.image_height
@@ -23,6 +27,7 @@ def depths_to_points(view, depthmap):
     points = depthmap.reshape(-1, 1) * rays_d + rays_o
     return points
 
+
 def depth_to_normal(view, depth):
     """
         view: view camera
@@ -35,3 +40,11 @@ def depth_to_normal(view, depth):
     normal_map = torch.nn.functional.normalize(torch.cross(dx, dy, dim=-1), dim=-1)
     output[1:-1, 1:-1, :] = normal_map
     return output
+
+def layer_separation(pcd: BasicPointCloud):
+    """
+        Separate the point cloud into layers based on distance.
+    """
+
+
+    pass
