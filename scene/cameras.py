@@ -26,7 +26,7 @@ class Camera(nn.Module):
         self.FoVx = FoVx
         self.FoVy = FoVy
         self.image_name = image_name
-        self.image_full_name = f"image_name.{extension}"
+        self.image_full_name = f"{image_name}.{extension}"
         self.extension = extension
 
         try:
