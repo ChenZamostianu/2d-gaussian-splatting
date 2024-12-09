@@ -127,6 +127,7 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
                 tb_writer.add_scalar('train_loss_patches/normal_loss', ema_normal_for_log, iteration)
 
             training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+            # TODO: Saving iteration intervals should be increased - 30_000, 20_000, 10_000 (?)
             if (iteration in saving_iterations):
                 extract_dmaps(background, dataset, gaussians, pipe, scene, iteration)
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
@@ -420,7 +421,7 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
             "depth_height": depth_map.shape[0],
             "depth_min": depth_map_min,
             "depth_max": depth_map_max,
-            "file_name": f"{cam.uid}_depth",
+            "file_name": f"{cam.image_name}",
             "reference_view_id": cam.uid,
             "neighbor_view_ids": list(range(len(vp))),
             "K": create_intrinsic_matrix(cam),
