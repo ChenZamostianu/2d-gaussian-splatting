@@ -415,8 +415,9 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
         depth_map_min = depth_map[valid_mask].min().item()
         depth_map_max = depth_map[valid_mask].max().item()
         depth_map = depth_map.detach().cpu().permute(1, 2, 0).numpy()
+        depth_map = depth_map[..., 0].astype(np.float64)
         normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
-        confidence_map = np.ones((depth_map.shape[0], depth_map.shape[1]), dtype=np.float32) * 10
+        confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
         data = {
             "depth_map": depth_map,  ##
             "image_width": cam.image_width,
