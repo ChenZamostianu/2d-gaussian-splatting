@@ -469,7 +469,7 @@ def wandb_logger(predicted_image, normal_map, depth_map, iteration, num_patches,
         f"View_{uid}/Depth_Map": wandb.Image(
             depth_viz,
             caption="Depth Map",
-            mode="magma"
+            mode="L"
         ),
 
         f"View_{uid}/Normal_Map": wandb.Image(
