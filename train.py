@@ -129,7 +129,7 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
             training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             # TODO: Saving iteration intervals should be increased - 30_000, 20_000, 10_000 (?)
             if (iteration in saving_iterations):
-                extract_dmaps(background, dataset, gaussians, pipe, scene, iteration)
+                extract_dmaps(background, dataset, gaussians, pipe, scene)
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
@@ -179,85 +179,40 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
                     # raise e
                     network_gui.conn = None
 
-def loadDMAP(dmap_path):
-    with open(dmap_path, "rb") as dmap:
-        file_type = dmap.read(2).decode()
-        content_type = np.frombuffer(dmap.read(1), dtype=np.dtype("B"))
-        reserve = np.frombuffer(dmap.read(1), dtype=np.dtype("B"))
+def create_intrinsic_matrix(camera) :
+    """
+    Creates an intrinsic matrix (K) from the Camera() object.
 
-        has_depth = content_type > 0
-        has_normal = content_type in [3, 7, 11, 15]
-        has_conf = content_type in [5, 7, 13, 15]
-        has_views = content_type in [9, 11, 13, 15]
+    Args:
+        camera: The Camera() object containing FoVx, image_width, and image_height.
 
-        image_width, image_height = np.frombuffer(dmap.read(8), dtype=np.dtype("I"))
-        depth_width, depth_height = np.frombuffer(dmap.read(8), dtype=np.dtype("I"))
+    Returns:
+        np.ndarray: The intrinsic matrix K of shape (3, 3).
+    """
+    if not hasattr(camera, 'FoVx') or not hasattr(camera, 'image_width') or not hasattr(camera, 'image_height'):
+        raise ValueError("Camera object must have 'FoVx', 'image_width', and 'image_height' attributes.")
 
-        if (
-            file_type != "DR"
-            or has_depth == False
-            or depth_width <= 0
-            or depth_height <= 0
-            or image_width < depth_width
-            or image_height < depth_height
-        ):
-            print("error: opening file '{}' for reading depth-data".format(dmap_path))
-            return
+    # Extract necessary attributes
+    FoVx = camera.FoVx  # Field of view in the x direction
+    image_width = camera.image_width
+    image_height = camera.image_height
 
-        depth_min, depth_max = np.frombuffer(dmap.read(8), dtype=np.dtype("f"))
+    # Compute the focal length in pixels (f_x and f_y)
+    f_x = (image_width / 2) / math.tan(FoVx / 2)
+    f_y = f_x * (image_height / image_width)  # Assuming square pixels
 
-        file_name_size = np.frombuffer(dmap.read(2), dtype=np.dtype("H"))[0]
-        file_name = dmap.read(file_name_size).decode()
+    # Principal point (cx, cy)
+    c_x = image_width / 2
+    c_y = image_height / 2
 
-        view_ids_size = np.frombuffer(dmap.read(4), dtype=np.dtype("I"))[0]
-        reference_view_id, *neighbor_view_ids = np.frombuffer(
-            dmap.read(4 * view_ids_size), dtype=np.dtype("I")
-        )
+    # Construct the intrinsic matrix
+    K = torch.tensor([
+        [f_x, 0,   c_x],
+        [0,   f_y, c_y],
+        [0,   0,   1]
+    ], dtype=torch.float32)
 
-        K = np.frombuffer(dmap.read(72), dtype=np.dtype("d")).reshape(3, 3)
-        R = np.frombuffer(dmap.read(72), dtype=np.dtype("d")).reshape(3, 3)
-        C = np.frombuffer(dmap.read(24), dtype=np.dtype("d"))
-
-        data = {
-            "has_normal": has_normal,
-            "has_conf": has_conf,
-            "has_views": has_views,
-            "image_width": image_width,
-            "image_height": image_height,
-            "depth_width": depth_width,
-            "depth_height": depth_height,
-            "depth_min": depth_min,
-            "depth_max": depth_max,
-            "file_name": file_name,
-            "reference_view_id": reference_view_id,
-            "neighbor_view_ids": neighbor_view_ids,
-            "K": K,
-            "R": R,
-            "C": C,
-        }
-
-        map_size = depth_width * depth_height
-        depth_map = np.frombuffer(dmap.read(4 * map_size), dtype=np.dtype("f")).reshape(
-            depth_height, depth_width
-        )
-        data.update({"depth_map": depth_map})
-        if has_normal:
-            normal_map = np.frombuffer(
-                dmap.read(4 * map_size * 3), dtype=np.dtype("f")
-            ).reshape(depth_height, depth_width, 3)
-            data.update({"normal_map": normal_map})
-        if has_conf:
-            confidence_map = np.frombuffer(
-                dmap.read(4 * map_size), dtype=np.dtype("f")
-            ).reshape(depth_height, depth_width)
-            data.update({"confidence_map": confidence_map})
-        if has_views:
-            views_map = np.frombuffer(
-                dmap.read(map_size * 4), dtype=np.dtype("B")
-            ).reshape(depth_height, depth_width, 4)
-            data.update({"views_map": views_map})
-
-    return data
+    return K.detach().cpu().numpy().astype(np.float64)
 
 def saveDMAP(data: dict, dmap_path: str):
     assert "depth_map" in data, "depth_map is required"
@@ -334,42 +289,7 @@ def saveDMAP(data: dict, dmap_path: str):
             views_map = data["views_map"]
             dmap.write(views_map.tobytes())
 
-
-def create_intrinsic_matrix(camera):
-    """
-    Creates an intrinsic matrix (K) from the Camera() object.
-
-    Args:
-        camera: The Camera() object containing FoVx, image_width, and image_height.
-
-    Returns:
-        torch.Tensor: The intrinsic matrix K of shape (3, 3).
-    """
-    if not hasattr(camera, 'FoVx') or not hasattr(camera, 'image_width') or not hasattr(camera, 'image_height'):
-        raise ValueError("Camera object must have 'FoVx', 'image_width', and 'image_height' attributes.")
-
-    # Extract necessary attributes
-    FoVx = camera.FoVx  # Field of view in the x direction
-    image_width = camera.image_width
-    image_height = camera.image_height
-
-    # Compute the focal length in pixels (f_x and f_y)
-    f_x = (image_width / 2) / math.tan(FoVx / 2)
-    f_y = f_x * (image_height / image_width)  # Assuming square pixels
-
-    # Principal point (cx, cy)
-    c_x = image_width / 2
-    c_y = image_height / 2
-
-    # Construct the intrinsic matrix
-    K = torch.tensor([
-        [f_x, 0,   c_x],
-        [0,   f_y, c_y],
-        [0,   0,   1]
-    ], dtype=torch.float32)
-
-    return K.detach().cpu().numpy()
-def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
+def extract_dmaps(background, dataset, gaussians, pipe, scene):
     import torchvision.transforms as F
 
     def normalize_depth(depth_map):
@@ -392,8 +312,6 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
 
 
     # base_mvs = os.path.join(dataset.model_path, f"mvs_{iteration}")
-    # if not os.path.exists(base_mvs):
-    #     os.makedirs(base_mvs)
     base_mvs = dataset.model_path
     for cam in vp:
 
@@ -403,8 +321,6 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
 
         depth_map = rend_pkg['surf_depth']
         depth_map = normalize_depth(depth_map)
-        #true_size = (depth_map.shape[0] * dataset._resolution, depth_map.shape[1] * dataset._resolution)
-        #depth_map = resize_rgb_image(depth_map, desired_size=true_size)
 
         valid_mask = ~((depth_map.isinf()) | (depth_map.isnan()))
         depth_map_min = depth_map[valid_mask].min().item()
@@ -414,7 +330,7 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
         normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
         confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
         data = {
-            "depth_map": depth_map,  ##
+            "depth_map": depth_map,
             "image_width": cam.image_width,
             "image_height": cam.image_height,
             "depth_width": depth_map.shape[1],
@@ -424,14 +340,13 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
             "file_name": f"{cam.image_full_name}",
             "reference_view_id": cam.uid,
             "neighbor_view_ids": list(range(len(vp))),
-            "K": create_intrinsic_matrix(cam),
-            "R": cam.R,
-            "C": cam.T,
+            "K": create_intrinsic_matrix(cam).astype(np.float64),
+            "R": cam.R.astype(np.float64),
+            "C": cam.T.astype(np.float64),
             # Optional fields (include if available)
             "normal_map": normal_map,
             "confidence_map": confidence_map,  ##
         }
-        print(f"k is: {data['K']}, R is: {data['R']}, C is: {data['C']}")
 
         saveDMAP(data, dmap_path=dmap_path)
 def wandb_logger(predicted_image, normal_map, depth_map, iteration, num_patches, loss, psnr_score, ssim_score, uid):
@@ -583,6 +498,8 @@ if __name__ == "__main__":
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     #parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
     #parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[10*(i+1) for i in range(2)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[100*(i+1) for i in range(2)])
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[3000*(i+1) for i in range(1)])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[3000*(i+1) for i in range(1)])
     parser.add_argument("--quiet", action="store_true")
