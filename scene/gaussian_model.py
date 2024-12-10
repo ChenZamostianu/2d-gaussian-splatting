@@ -130,15 +130,7 @@ class GaussianModel:
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
-        #fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
-        #fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
-        #features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
-        #features[:, :3, 0 ] = fused_color
-        #features[:, 3:, 1:] = 0.0
 
-        #print("Number of points at initialisation : ", fused_point_cloud.shape[0])
-
-        #dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
         mask = self.process_pointcloud(torch.from_numpy(pcd.points).float().cuda(),upper_quantile=.8, lower_quantile=.1)
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()[mask]
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())[mask] 
@@ -290,9 +282,12 @@ class GaussianModel:
                 optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
 
+
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group['name'] == 'pose':
+                continue
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -328,23 +323,69 @@ class GaussianModel:
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             assert len(group["params"]) == 1
-            extension_tensor = tensors_dict[group["name"]]
-            stored_state = self.optimizer.state.get(group['params'][0], None)
-            if stored_state is not None:
+            try:
+                extension_tensor = tensors_dict[group["name"]]
+                stored_state = self.optimizer.state.get(group['params'][0], None)
+                if stored_state is not None:
 
-                stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
-                stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
+                    stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)),
+                                                        dim=0)
+                    stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
+                                                           dim=0)
 
-                del self.optimizer.state[group['params'][0]]
-                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-                self.optimizer.state[group['params'][0]] = stored_state
+                    del self.optimizer.state[group['params'][0]]
+                    group["params"][0] = nn.Parameter(
+                        torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                    self.optimizer.state[group['params'][0]] = stored_state
 
-                optimizable_tensors[group["name"]] = group["params"][0]
-            else:
-                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-                optimizable_tensors[group["name"]] = group["params"][0]
+                    optimizable_tensors[group["name"]] = group["params"][0]
+                else:
+                    group["params"][0] = nn.Parameter(
+                        torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                    optimizable_tensors[group["name"]] = group["params"][0]
+            except KeyError as e:
+                print(f"KeyError: {e}")
+                continue
 
         return optimizable_tensors
+    #
+    # def prune_points(self, mask):
+    #     valid_points_mask = ~mask
+    #     optimizable_tensors = self._prune_optimizer(valid_points_mask)
+    #
+    #     self._xyz = optimizable_tensors["xyz"]
+    #     self._features_dc = optimizable_tensors["f_dc"]
+    #     self._features_rest = optimizable_tensors["f_rest"]
+    #     self._opacity = optimizable_tensors["opacity"]
+    #     self._scaling = optimizable_tensors["scaling"]
+    #     self._rotation = optimizable_tensors["rotation"]
+    #
+    #     self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
+    #
+    #     self.denom = self.denom[valid_points_mask]
+    #     self.max_radii2D = self.max_radii2D[valid_points_mask]
+    #
+    # def cat_tensors_to_optimizer(self, tensors_dict):
+    #     optimizable_tensors = {}
+    #     for group in self.optimizer.param_groups:
+    #         assert len(group["params"]) == 1
+    #         extension_tensor = tensors_dict[group["name"]]
+    #         stored_state = self.optimizer.state.get(group['params'][0], None)
+    #         if stored_state is not None:
+    #
+    #             stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
+    #             stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
+    #
+    #             del self.optimizer.state[group['params'][0]]
+    #             group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+    #             self.optimizer.state[group['params'][0]] = stored_state
+    #
+    #             optimizable_tensors[group["name"]] = group["params"][0]
+    #         else:
+    #             group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+    #             optimizable_tensors[group["name"]] = group["params"][0]
+    #
+    #     return optimizable_tensors
 
     def densification_postfix(self, new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation):
         d = {"xyz": new_xyz,
