@@ -78,7 +78,7 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         
         # regularization
-        lambda_normal = opt.lambda_normal if iteration > 2000 else 0.0
+        lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
 
         rend_dist = render_pkg["rend_dist"]
@@ -498,8 +498,8 @@ if __name__ == "__main__":
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     #parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
     #parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[3000*(i+1) for i in range(1)])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3000*(i+1) for i in range(1)])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[9000*(i+1) for i in range(1)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[9000*(i+1) for i in range(1)])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
