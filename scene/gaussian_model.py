@@ -344,48 +344,10 @@ class GaussianModel:
                         torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
                     optimizable_tensors[group["name"]] = group["params"][0]
             except KeyError as e:
-                print(f"KeyError: {e}")
+                # print(f"KeyError: {e}")
                 continue
 
         return optimizable_tensors
-    #
-    # def prune_points(self, mask):
-    #     valid_points_mask = ~mask
-    #     optimizable_tensors = self._prune_optimizer(valid_points_mask)
-    #
-    #     self._xyz = optimizable_tensors["xyz"]
-    #     self._features_dc = optimizable_tensors["f_dc"]
-    #     self._features_rest = optimizable_tensors["f_rest"]
-    #     self._opacity = optimizable_tensors["opacity"]
-    #     self._scaling = optimizable_tensors["scaling"]
-    #     self._rotation = optimizable_tensors["rotation"]
-    #
-    #     self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
-    #
-    #     self.denom = self.denom[valid_points_mask]
-    #     self.max_radii2D = self.max_radii2D[valid_points_mask]
-    #
-    # def cat_tensors_to_optimizer(self, tensors_dict):
-    #     optimizable_tensors = {}
-    #     for group in self.optimizer.param_groups:
-    #         assert len(group["params"]) == 1
-    #         extension_tensor = tensors_dict[group["name"]]
-    #         stored_state = self.optimizer.state.get(group['params'][0], None)
-    #         if stored_state is not None:
-    #
-    #             stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
-    #             stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
-    #
-    #             del self.optimizer.state[group['params'][0]]
-    #             group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-    #             self.optimizer.state[group['params'][0]] = stored_state
-    #
-    #             optimizable_tensors[group["name"]] = group["params"][0]
-    #         else:
-    #             group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-    #             optimizable_tensors[group["name"]] = group["params"][0]
-    #
-    #     return optimizable_tensors
 
     def densification_postfix(self, new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation):
         d = {"xyz": new_xyz,
