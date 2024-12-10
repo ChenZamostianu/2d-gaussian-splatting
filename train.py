@@ -431,6 +431,7 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene, iteration):
             "normal_map": normal_map,
             "confidence_map": confidence_map,  ##
         }
+        print(f"k is: {data["K"]},r is: {data["R"]}, c is: {data["C"]}")
 
         saveDMAP(data, dmap_path=dmap_path)
 def wandb_logger(predicted_image, normal_map, depth_map, iteration, num_patches, loss, psnr_score, ssim_score, uid):
