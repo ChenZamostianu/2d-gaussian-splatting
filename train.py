@@ -487,6 +487,65 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
 
         torch.cuda.empty_cache()
 
+def run_2dgs(
+    source_path: str,
+    model_path: str,
+    iterations: int = 9000,
+    test_iterations: list = [9000],
+    save_iterations: list = [9000],
+    checkpoint_iterations: list = [],
+    start_checkpoint: str = None,
+    quiet: bool = False,
+    ip: str = "127.0.0.1",
+    port: int = 6009,
+    detect_anomaly: bool = False
+):
+
+    # Create a new argument parser and load model, pipeline, and optimization params
+    parser = ArgumentParser(description="Training script parameters")
+    lp = ModelParams(parser)
+    op = OptimizationParams(parser)
+    pp = PipelineParams(parser)
+
+    # Add arguments that are normally provided via CLI
+    parser.add_argument('--ip', type=str, default=ip)
+    parser.add_argument('--port', type=int, default=port)
+    parser.add_argument('--detect_anomaly', action='store_true', default=detect_anomaly)
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=test_iterations)
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=save_iterations)
+    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=checkpoint_iterations)
+    parser.add_argument("--start_checkpoint", type=str, default=start_checkpoint)
+
+    # The pipeline arguments (ModelParams, OptimizationParams, PipelineParams)
+    # also define `--source_path` and `--model_path` along with others.
+    # We will parse with an empty list to avoid CLI parsing, then set values manually.
+    args = parser.parse_args([])
+
+    # Set values programmatically
+    args.source_path = source_path
+    args.model_path = model_path
+    args.iterations = iterations
+    args.quiet = quiet
+    args.detect_anomaly = detect_anomaly
+    args.ip = ip
+    args.port = port
+    if start_checkpoint:
+        args.start_checkpoint = start_checkpoint
+    # Add the final iteration to save_iterations if not already present
+    if args.iterations not in args.save_iterations:
+        args.save_iterations.append(args.iterations)
+
+    # Initialize RNG state and network GUI
+    safe_state(args.quiet)
+    network_gui.init(args.ip, args.port)
+    torch.autograd.set_detect_anomaly(args.detect_anomaly)
+
+    # Extract the params from args and start training
+    training(lp.extract(args), op.extract(args), pp.extract(args), 
+             args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint)
+
+
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
