@@ -86,20 +86,7 @@ class Scene:
                                                            "iteration_" + str(self.loaded_iter),
                                                            "point_cloud.ply"))
         else:
-            pcd = scene_info.point_cloud
-            mask = self.process_pointcloud(pcd)
-
-            # Basic processing of the pointcloud using 1nn neighbors with maximum distance threshold
-            # This should result in sparser pointcloud representation, leaving clusters with densely packed neighbors.
-            fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()[mask]
-            fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())[mask]
-            fused_normals = torch.tensor(np.ones_like(np.asarray(pcd.points))).float().cuda()[mask]
-
-            # Next, we perform clustering using persistent homology, where we let the cluster evolve till the
-            # pointcloud is resulted in 2 to 1 connected components, each holds a cluster of 3d points.
-            # We see how much time it took the last 2 connected components to die. In case it took the last 2 connected components a significant time until they collapsed into a single cluster, we say that they are valid.
-
-            self.gaussians.create_from_pcd(pcd=pcd, spatial_lr_scale=self.cameras_extent)
+            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
             self.gaussians.init_RT_seq(self.train_cameras)
 
 
