@@ -37,13 +37,11 @@ class Camera(nn.Module):
             self.data_device = torch.device("cuda")
 
         self.original_image = image.clamp(0.0, 1.0).to(self.data_device)
-        if not orig_im_size:
-            self.image_width = self.original_image.shape[2]
-            self.image_height = self.original_image.shape[1]
-        else:
-            self.image_width = orig_im_size[0]
-            self.image_height = orig_im_size[1]
+        self.image_width = self.original_image.shape[2]
+        self.image_height = self.original_image.shape[1]
 
+        self.true_width = orig_im_size[0]
+        self.true_height = orig_im_size[1]
         if gt_alpha_mask is not None:
             # self.original_image *= gt_alpha_mask.to(self.data_device)
             self.gt_alpha_mask = gt_alpha_mask.to(self.data_device)
