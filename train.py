@@ -7,7 +7,7 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-import wandb
+# import wandb
 import os
 import numpy as np
 import torch
@@ -30,8 +30,8 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
-    wandb.login()
-    wandb.init(project="Medida-dev", entity='cryptoguys')
+    # wandb.login()
+    # wandb.init(project="Medida-dev", entity='cryptoguys')
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -99,9 +99,9 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
             if viewpoint_cam.uid == 1 or viewpoint_cam.uid == 10:
                 psnr_val = psnr(image, gt_image).mean().double()
                 ssim_val = ssim(image, gt_image).mean().double()
-                wandb_logger(image,
-                     rend_normal, depthmap, iteration,
-                     gaussians.get_xyz.shape[0], loss.item(), psnr_val.item(), ssim_val.item(), viewpoint_cam.uid)
+                # wandb_logger(image,
+                #      rend_normal, depthmap, iteration,
+                #      gaussians.get_xyz.shape[0], loss.item(), psnr_val.item(), ssim_val.item(), viewpoint_cam.uid)
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             ema_dist_for_log = 0.4 * dist_loss.item() + 0.6 * ema_dist_for_log
