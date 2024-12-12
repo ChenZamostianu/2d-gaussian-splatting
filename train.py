@@ -437,7 +437,7 @@ def wandb_logger(predicted_image, normal_map, depth_map, iteration, num_patches,
         return ((normals + 1) * 127.5).astype(np.uint8)
 
     # Process images
-    depth_viz = depth_map.detach().cpu().permute(1, 2, 0).numpy()
+    depth_viz = normalize_depth(depth_map.detach().cpu().permute(1, 2, 0).numpy())
     pred_img = normalize_image(predicted_image.detach().cpu().permute(1, 2, 0).numpy())
     normal_viz = normalize_normals(normal_map.detach().cpu().permute(1, 2, 0).numpy())
 
