@@ -390,6 +390,9 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
         confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
         print(f"image_width {cam.image_width}")
         print(f"image_hight {cam.image_height}")
+        print(f"depth_width {depth_map.shape[1]}")
+        print(f"depth_hight {depth_map.shape[0]}\n\n")
+
         data = {
             "depth_map": depth_map,
             "image_width": cam.image_width,

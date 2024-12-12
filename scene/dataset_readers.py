@@ -78,6 +78,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         intr = cam_intrinsics[extr.camera_id]
         height = intr.height
         width = intr.width
+        print(f"height: {height}, width: {width}")
 
         uid = intr.id
         R = np.transpose(qvec2rotmat(extr.qvec))
