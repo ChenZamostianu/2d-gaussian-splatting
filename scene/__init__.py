@@ -12,11 +12,17 @@
 import os
 import random
 import json
+
+import numpy as np
+import torch
+
+from utils.sh_utils import RGB2SH
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
+from simple_knn._C import distCUDA2
 
 class Scene:
 
@@ -80,7 +86,20 @@ class Scene:
                                                            "iteration_" + str(self.loaded_iter),
                                                            "point_cloud.ply"))
         else:
-            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+            pcd = scene_info.point_cloud
+            mask = self.process_pointcloud(pcd)
+
+            # Basic processing of the pointcloud using 1nn neighbors with maximum distance threshold
+            # This should result in sparser pointcloud representation, leaving clusters with densely packed neighbors.
+            fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()[mask]
+            fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())[mask]
+            fused_normals = torch.tensor(np.ones_like(np.asarray(pcd.points))).float().cuda()[mask]
+
+            # Next, we perform clustering using persistent homology, where we let the cluster evolve till the
+            # pointcloud is resulted in 2 to 1 connected components, each holds a cluster of 3d points.
+            # We see how much time it took the last 2 connected components to die. In case it took the last 2 connected components a significant time until they collapsed into a single cluster, we say that they are valid.
+
+            self.gaussians.create_from_pcd(pcd=pcd, spatial_lr_scale=self.cameras_extent)
             self.gaussians.init_RT_seq(self.train_cameras)
 
 
@@ -93,3 +112,9 @@ class Scene:
 
     def getTestCameras(self, scale=1.0):
         return self.test_cameras[scale]
+
+    def process_pointcloud(self, pts3d, upper_quantile=.7, lower_quantile=0.):
+        max_dist = torch.quantile(distCUDA2(pts3d).float(), q=upper_quantile).item()
+        min_dist = torch.quantile(distCUDA2(pts3d).float(), q=lower_quantile).item()
+        mask = (distCUDA2(pts3d).float() >= min_dist) & (distCUDA2(pts3d).float() <= max_dist)
+        return mask.cuda()

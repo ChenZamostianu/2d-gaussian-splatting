@@ -44,6 +44,7 @@ def loadCam(args, id, cam_info, resolution_scale):
         loaded_mask = PILtoTorch(cam_info.image.split()[3], resolution)
         gt_image = resized_image_rgb
     else:
+
         resized_image_rgb = PILtoTorch(cam_info.image, resolution)
         loaded_mask = None
         gt_image = resized_image_rgb
@@ -53,7 +54,7 @@ def loadCam(args, id, cam_info, resolution_scale):
                   image=gt_image, gt_alpha_mask=loaded_mask,
                   image_name=cam_info.image_name,
                   extension=cam_info.extension,
-                  uid=id, data_device=args.data_device)
+                  uid=id, data_device=args.data_device, orig_im_size=(orig_w, orig_h))
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []
