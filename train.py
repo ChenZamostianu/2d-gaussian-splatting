@@ -289,6 +289,71 @@ def saveDMAP(data: dict, dmap_path: str):
             views_map = data["views_map"]
             dmap.write(views_map.tobytes())
 
+def cameras_2_dmaps(cameras, path_to_mvs):
+    """
+    Converts a list of Camera() objects into depth maps and saves them as.dmap files.
+    cam is assumed to have the following attributes:
+        1) cam.R, cam.C, cam.K, corresponding to Rotation, translation and intrinsic matrix accordingly.
+        2) cam.depth_map, which corresponds to the depth of a given viewing point
+        NOTE: All of these attributes should be numpy arrays as float64, not tensors!!!
+        In addition, make sure that it is not arranged as tensor image format, but standard one (for instance, not [C, H, W] but [H, W, C])
+        3) cam.image_width and cam.image_height, representing the width and height of the image
+
+    Args:
+        cameras: List of Camera() objects.
+        path_to_mvs: Path to the directory where the.dmap files will be saved.
+
+    Returns:
+        None
+    """
+    def normalize_depth(depth_map):
+        min_depth = depth_map.min()
+        max_depth = depth_map.max()
+        range_depth = max_depth - min_depth
+        if range_depth == 0:
+            return torch.zeros_like(depth_map)
+        normalized_depth = (depth_map - min_depth) / range_depth
+        return normalized_depth
+
+
+    for cam in cameras:
+
+        dmap_path = os.path.join(path_to_mvs, f"depth_{cam.uid:04d}.dmap")
+        depth_map = normalize_depth(cam.depth_map)
+
+        valid_mask = ~((np.isnan(depth_map)) | (np.isinf(depth_map)))
+
+        # check if np.array depthmap is nan or inf:
+        depth_map[np.isnan(depth_map)] = np.inf
+        depth_map[np.isinf(depth_map)] = 0
+
+
+        depth_map_min = depth_map[valid_mask].min()
+        depth_map_max = depth_map[valid_mask].max()
+        if depth_map.ndim == 3:
+            depth_map = depth_map[..., 0].astype(np.float64)
+
+        confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
+        data = {
+            "depth_map": depth_map,
+            "image_width": cam.image_width,
+            "image_height": cam.image_height,
+            "depth_width": depth_map.shape[1],
+            "depth_height": depth_map.shape[0],
+            "depth_min": depth_map_min,
+            "depth_max": depth_map_max,
+            "file_name": f"{cam.image_full_name}",
+            "reference_view_id": cam.uid,
+            "neighbor_view_ids": list(range(len(cameras))),
+            "K": create_intrinsic_matrix(cam).astype(np.float64),
+            "R": cam.R.astype(np.float64),
+            "C": cam.C.astype(np.float64),
+            # Optional fields (include if available)
+            "confidence_map": confidence_map,
+            # "normal_map": normal_map,
+        }
+
+        saveDMAP(data, dmap_path=dmap_path)
 def extract_dmaps(background, dataset, gaussians, pipe, scene):
     import torchvision.transforms as F
 
@@ -300,12 +365,6 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
             return torch.zeros_like(depth_map)
         normalized_depth = (depth_map - min_depth) / range_depth
         return normalized_depth
-
-    def resize_rgb_image(image, desired_size):
-        # ... (same preprocessing as before)
-        resized_image = F.resize(image, desired_size)
-        return resized_image
-
 
 
     vp = scene.getTrainCameras().copy()
@@ -487,65 +546,6 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
 
         torch.cuda.empty_cache()
 
-# def run_2dgs(
-#     source_path: str,
-#     model_path: str,
-#     iterations: int = 9000,
-#     test_iterations: list = [9000],
-#     save_iterations: list = [9000],
-#     checkpoint_iterations: list = [],
-#     start_checkpoint: str = None,
-#     quiet: bool = False,
-#     ip: str = "127.0.0.1",
-#     port: int = 6009,
-#     detect_anomaly: bool = False
-# ):
-
-#     # Create a new argument parser and load model, pipeline, and optimization params
-#     parser = ArgumentParser(description="Training script parameters")
-#     lp = ModelParams(parser)
-#     op = OptimizationParams(parser)
-#     pp = PipelineParams(parser)
-
-#     # Add arguments that are normally provided via CLI
-#     parser.add_argument('--ip', type=str, default=ip)
-#     parser.add_argument('--port', type=int, default=port)
-#     parser.add_argument('--detect_anomaly', action='store_true', default=detect_anomaly)
-#     parser.add_argument("--quiet", action="store_true")
-#     parser.add_argument("--test_iterations", nargs="+", type=int, default=test_iterations)
-#     parser.add_argument("--save_iterations", nargs="+", type=int, default=save_iterations)
-#     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=checkpoint_iterations)
-#     parser.add_argument("--start_checkpoint", type=str, default=start_checkpoint)
-
-#     # The pipeline arguments (ModelParams, OptimizationParams, PipelineParams)
-#     # also define `--source_path` and `--model_path` along with others.
-#     # We will parse with an empty list to avoid CLI parsing, then set values manually.
-#     args = parser.parse_args([])
-
-#     # Set values programmatically
-#     args.source_path = source_path
-#     args.model_path = model_path
-#     args.iterations = iterations
-#     args.quiet = quiet
-#     args.detect_anomaly = detect_anomaly
-#     args.ip = ip
-#     args.port = port
-#     if start_checkpoint:
-#         args.start_checkpoint = start_checkpoint
-#     # Add the final iteration to save_iterations if not already present
-#     if args.iterations not in args.save_iterations:
-#         args.save_iterations.append(args.iterations)
-
-#     # Initialize RNG state and network GUI
-#     safe_state(args.quiet)
-#     network_gui.init(args.ip, args.port)
-#     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-
-#     # Extract the params from args and start training
-#     training(lp.extract(args), op.extract(args), pp.extract(args), 
-#              args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint)
-
-
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
@@ -555,10 +555,8 @@ if __name__ == "__main__":
     parser.add_argument('--ip', type=str, default="127.0.0.1")
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    #parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    #parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[15000*(i+1) for i in range(1)])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[15000*(i+1) for i in range(1)])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[10*(i+1) for i in range(2)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[100*(i+1) for i in range(2)])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
