@@ -7,7 +7,7 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-# import wandb
+import wandb
 import os
 import numpy as np
 import torch
@@ -30,8 +30,8 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
-    # wandb.login()
-    # wandb.init(project="Medida-dev", entity='cryptoguys')
+    wandb.login()
+    wandb.init(project="Medida-dev", entity='cryptoguys')
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -99,9 +99,9 @@ render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["surf_depth"]
             if viewpoint_cam.uid == 1 or viewpoint_cam.uid == 10:
                 psnr_val = psnr(image, gt_image).mean().double()
                 ssim_val = ssim(image, gt_image).mean().double()
-                # wandb_logger(image,
-                #      rend_normal, depthmap, iteration,
-                #      gaussians.get_xyz.shape[0], loss.item(), psnr_val.item(), ssim_val.item(), viewpoint_cam.uid)
+                wandb_logger(image,
+                     rend_normal, depthmap, iteration,
+                     gaussians.get_xyz.shape[0], loss.item(), psnr_val.item(), ssim_val.item(), viewpoint_cam.uid)
             # Progress bar
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             ema_dist_for_log = 0.4 * dist_loss.item() + 0.6 * ema_dist_for_log
@@ -388,6 +388,8 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
         depth_map = depth_map[..., 0].astype(np.float64)
         normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
         confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
+        print(f"image_width {cam.image_width}")
+        print(f"image_hight {cam.image_height}")
         data = {
             "depth_map": depth_map,
             "image_width": cam.image_width,
@@ -556,7 +558,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[10*(i+1) for i in range(2)])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[100*(i+1) for i in range(2)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1000*(i+1) for i in range(30)])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
