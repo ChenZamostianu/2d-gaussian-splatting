@@ -336,8 +336,8 @@ def cameras_2_dmaps(cameras, path_to_mvs):
         confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
         data = {
             "depth_map": depth_map,
-            "image_width": cam.image_width,
-            "image_height": cam.image_height,
+            "image_width": cam.true_width,
+            "image_height": cam.true_height,
             "depth_width": depth_map.shape[1],
             "depth_height": depth_map.shape[0],
             "depth_min": depth_map_min,
