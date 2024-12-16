@@ -311,6 +311,7 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
         depth_map_max = depth_map[valid_mask].max().item()
         depth_map = depth_map.detach().cpu().permute(1, 2, 0).numpy()
         depth_map = depth_map[..., 0]
+        depth_map[depth_map < 20] = 20
         normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
         confidence_map = np.ones_like(depth_map) * 10
         print(f"image_width {cam.image_width}")
@@ -330,7 +331,7 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
             "file_name": f"{cam.image_full_name}",
             "reference_view_id": cam.uid,
             "neighbor_view_ids": list(range(len(vp))),
-            "K": create_intrinsic_matrix(cam), #.astype(np.float64),
+            "K": create_intrinsic_matrix(cam),
             "R": cam.R, #.astype(np.float64),
             "C": cam.T, #.astype(np.float64),
             # Optional fields (include if available)
