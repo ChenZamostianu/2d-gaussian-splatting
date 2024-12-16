@@ -289,82 +289,7 @@ def saveDMAP(data: dict, dmap_path: str):
             views_map = data["views_map"]
             dmap.write(views_map.tobytes())
 
-def cameras_2_dmaps(cameras, path_to_mvs):
-    """
-    Converts a list of Camera() objects into depth maps and saves them as.dmap files.
-    cam is assumed to have the following attributes:
-        1) cam.R, cam.C, cam.K, corresponding to Rotation, translation and intrinsic matrix accordingly.
-        2) cam.depth_map, which corresponds to the depth of a given viewing point
-        NOTE: All of these attributes should be numpy arrays as float64, not tensors!!!
-        In addition, make sure that it is not arranged as tensor image format, but standard one (for instance, not [C, H, W] but [H, W, C])
-        3) cam.image_width and cam.image_height, representing the width and height of the image
-
-    Args:
-        cameras: List of Camera() objects.
-        path_to_mvs: Path to the directory where the.dmap files will be saved.
-
-    Returns:
-        None
-    """
-    def normalize_depth(depth_map):
-        min_depth = depth_map.min()
-        max_depth = depth_map.max()
-        range_depth = max_depth - min_depth
-        if range_depth == 0:
-            return torch.zeros_like(depth_map)
-        normalized_depth = (depth_map - min_depth) / range_depth
-        return normalized_depth
-
-
-    for cam in cameras:
-
-        dmap_path = os.path.join(path_to_mvs, f"depth_{cam.uid:04d}.dmap")
-        depth_map = normalize_depth(cam.depth_map)
-
-        valid_mask = ~((np.isnan(depth_map)) | (np.isinf(depth_map)))
-
-        # check if np.array depthmap is nan or inf:
-        depth_map[np.isnan(depth_map)] = np.inf
-        depth_map[np.isinf(depth_map)] = 0
-
-
-        depth_map_min = depth_map[valid_mask].min()
-        depth_map_max = depth_map[valid_mask].max()
-        if depth_map.ndim == 3:
-            depth_map = depth_map[..., 0].astype(np.float64)
-
-        confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
-        data = {
-            "depth_map": depth_map,
-            "image_width": cam.true_width,
-            "image_height": cam.true_height,
-            "depth_width": depth_map.shape[1],
-            "depth_height": depth_map.shape[0],
-            "depth_min": depth_map_min,
-            "depth_max": depth_map_max,
-            "file_name": f"{cam.image_full_name}",
-            "reference_view_id": cam.uid,
-            "neighbor_view_ids": list(range(len(cameras))),
-            "K": create_intrinsic_matrix(cam).astype(np.float64),
-            "R": cam.R.astype(np.float64),
-            "C": cam.C.astype(np.float64),
-            # Optional fields (include if available)
-            "confidence_map": confidence_map,
-            # "normal_map": normal_map,
-        }
-
-        saveDMAP(data, dmap_path=dmap_path)
 def extract_dmaps(background, dataset, gaussians, pipe, scene):
-    import torchvision.transforms as F
-
-    def normalize_depth(depth_map):
-        min_depth = depth_map.min()
-        max_depth = depth_map.max()
-        range_depth = max_depth - min_depth
-        if range_depth == 0:
-            return torch.zeros_like(depth_map)
-        normalized_depth = (depth_map - min_depth) / range_depth
-        return normalized_depth
 
 
     vp = scene.getTrainCameras().copy()
@@ -378,23 +303,22 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
 
         rend_pkg = render(cam, gaussians, pipe, background)
 
-        depth_map = rend_pkg['surf_depth']
-        depth_map = normalize_depth(depth_map)
+        depth_map = torch.clamp_min(rend_pkg['surf_depth'], 0.0)
+
 
         valid_mask = ~((depth_map.isinf()) | (depth_map.isnan()))
         depth_map_min = depth_map[valid_mask].min().item()
         depth_map_max = depth_map[valid_mask].max().item()
         depth_map = depth_map.detach().cpu().permute(1, 2, 0).numpy()
-        depth_map = depth_map[..., 0].astype(np.float64)
+        depth_map = depth_map[..., 0]
         normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
-        confidence_map = np.ones_like(depth_map, dtype=np.float64) * 10
+        confidence_map = np.ones_like(depth_map) * 10
         print(f"image_width {cam.image_width}")
         print(f"image_hight {cam.image_height}")
         print(f"image_width {cam.true_width}")
         print(f"image_hight {cam.true_height}")
         print(f"depth_width {depth_map.shape[1]}")
         print(f"depth_hight {depth_map.shape[0]}\n\n")
-
         data = {
             "depth_map": depth_map,
             "image_width": cam.true_width,
@@ -406,9 +330,9 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
             "file_name": f"{cam.image_full_name}",
             "reference_view_id": cam.uid,
             "neighbor_view_ids": list(range(len(vp))),
-            "K": create_intrinsic_matrix(cam).astype(np.float64),
-            "R": cam.R.astype(np.float64),
-            "C": cam.T.astype(np.float64),
+            "K": create_intrinsic_matrix(cam), #.astype(np.float64),
+            "R": cam.R, #.astype(np.float64),
+            "C": cam.T, #.astype(np.float64),
             # Optional fields (include if available)
             "normal_map": normal_map,
             "confidence_map": confidence_map,  ##
