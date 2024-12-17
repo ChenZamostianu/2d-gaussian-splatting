@@ -314,6 +314,9 @@ def extract_dmaps(background, dataset, gaussians, pipe, scene):
         depth_map[depth_map > 20] = 20
         normal_map = rend_pkg['rend_normal'].detach().cpu().permute(1, 2, 0).numpy()
         confidence_map = np.ones_like(depth_map) * 10
+        R = cam.R
+        T = cam.T
+        C = -R.transpose() @ T
         print(f"image_width {cam.image_width}")
         print(f"image_hight {cam.image_height}")
         print(f"image_width {cam.true_width}")
@@ -488,7 +491,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[10*(i+1) for i in range(2)])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[5_000*(i+1) for i in range(6)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000*(i+1) for i in range(6)])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
